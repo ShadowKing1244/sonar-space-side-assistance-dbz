@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>DBZ Sonar Radio - Space-Side Assistance</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
+  body {
+    margin: 0; overflow: hidden; background: black; color: #0f0; font-family: 'Orbitron', monospace;
+    user-select: none;
+  }
+  video#background-video {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -1;
+    filter: brightness(0.3) contrast(1.2);
+  }
+  h1 {
+    text-align: center; padding: 0.5em; font-weight: 700; font-size: 1.8em; text-shadow: 0 0 6px #0f0;
+  }
+  #sonar-screen {
+    position: relative; width: 600px; height: 600px; margin: 1em auto;
+    border: 3px solid #0f0; border-radius: 50%; background: radial-gradient(circle at center, #001100 60%, #000000 100%);
+    overflow: visible;
+  }
+  #sonar-rings {
+    position: absolute; width: 100%; height: 100%; border-radius: 50%;
+    background: repeating-radial-gradient(circle at center, transparent 0 20px, #0f0 21px 22px);
+    pointer-events: none;
+  }
+  .blip {
+    position: absolute; width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 6px 2px;
+    cursor: pointer; user-select: none;
+    transition: box-shadow 0.2s ease;
+  }
+  .blip.red {
+    background: #f00; box-shadow: 0 0 10px 4px #f33;
+  }
+  .blip.green {
+    background: #0f0; box-shadow: 0 0 10px 4px #3f3;
+  }
+  .blip.yellow {
+    background: #ff0; box-shadow: 0 0 10px 4px #ff3;
+  }
+  .blip.purple {
+    background: #a0f; box-shadow: 0 0 12px 5px #c9a7ff;
+  }
+  .planet {
+    position: absolute; width: 60px; height: 24px; background: #0f0; font-size: 10px; line-height: 1.2;
+    color: black; font-weight: 700; text-align: center; border-radius: 6px; opacity: 0.8;
+    user-select: none;
+  }
+  .planet:hover .tooltip {
+    display: block;
+  }
+  .tooltip {
+    display: none; position: absolute; top: -48px; left: 50%; transform: translateX(-50%);
+    background: #030; color: #0f0; padding: 4px 8px; border-radius: 4px; white-space: pre-line;
+    font-size: 12px; font-family: monospace; box-shadow: 0 0 5px #0f0;
+  }
+  #scanner-line {
+    position: absolute; top: 0; left: 0; pointer-events: none;
+  }
+  #static {
+    pointer-events: none;
+    position: absolute; width: 600px; height: 600px;
+    background-image:
+      radial-gradient(circle, rgba(0,255,0,0.06) 1px, transparent 2px),
+      radial-gradient(circle, rgba(0,255,0,0.04) 1px, transparent 2px);
+    background-position: 0 0, 25px 25px;
+    background-size: 50px 50px;
+    mix-blend-mode: screen;
+    animation: staticNoise 0.3s infinite;
+  }
+  @keyframes staticNoise {
+    0% { background-position: 0 0, 25px 25px; }
+    50% { background-position: 25px 25px, 0 0; }
+    100% { background-position: 0 0, 25px 25px; }
+  }
+  #intercept-box {
+    position: fixed; bottom: 1em; left: 50%; transform: translateX(-50%);
+    width: 600px; max-height: 280px; overflow-y: auto; background: rgba(0, 15, 0, 0.9);
+    border: 2px solid #0f0; padding: 1em; border-radius: 12px;
+    font-size: 14px; color: #0f0; box-shadow: 0 0 15px #0f0;
+    display: none;
+  }
+  #close-btn {
+    position: absolute; top: 0.3em; right: 0.5em; background: transparent; border: none;
+    color: #0f0; font-size: 20px; cursor: pointer; font-weight: 700;
+  }
+  #message {
+    min-height: 60px; margin-bottom: 12px; white-space: pre-wrap;
+  }
+  .question {
+    margin-bottom: 8px; font-weight: 700; text-shadow: 0 0 3px #0f0;
+  }
+  .answer-btn {
+    background: #002200; border: 1px solid #0f0; color: #0f0;
+    padding: 8px 12px; margin: 4px 4px 8px 0; border-radius: 8px;
+    cursor: pointer; font-family: 'Orbitron', monospace;
+    transition: background 0.3s ease;
+  }
+  .answer-btn:hover {
+    background: #0f0; color: black;
+  }
+  #chat-input-area {
+    margin-top: 10px; display: flex; gap: 8px;
+  }
+  #chat-input {
+    flex-grow: 1; background: #001100; border: 1px solid #0f0; color: #0f0; padding: 6px 10px;
+    font-family: 'Orbitron', monospace; font-size: 14px; border-radius: 8px;
+  }
+  #chat-send-btn {
+    background: #0f0; color: black; border: none; padding: 6px 16px; font-weight: 700; border-radius: 8px;
+    cursor: pointer; font-family: 'Orbitron', monospace;
+  }
+  #chatter {
+    position: fixed; bottom: 320px; left: 50%; transform: translateX(-50%);
+    color: #0f0; font-family: 'Orbitron', monospace; font-size: 14px;
+    text-shadow: 0 0 6px #0f0;
+    max-width: 600px; text-align: center; user-select: none;
+    min-height: 20px;
+  }
+</style>
+</head>
+<body>
+<video id="background-video" autoplay loop muted playsinline>
+  <source src="https://media.tenor.com/TG3RkXb2Mf0AAAPo/raditz-dragon-ball.mp4" type="video/mp4" />
+</video>
+<h1>DBZ Sonar Radio - Space-Side Assistance</h1>
+<div id="sonar-screen" aria-label="Sonar radar screen" role="application" tabindex="0">
+  <div id="sonar-rings"></div>
+  <canvas id="scanner-line" width="600" height="600"></canvas>
+  <div id="static"></div>
+</div>
+
+<div id="intercept-box" aria-live="polite" aria-atomic="true" aria-relevant="additions">
+  <button id="close-btn" aria-label="Close transmission">✖</button>
+  <div id="message"></div>
+  <div id="question-area"></div>
+  <div id="chat-input-area" style="display:none;">
+    <input type="text" id="chat-input" placeholder="Type a command or question..." autocomplete="off" />
+    <button id="chat-send-btn">Send</button>
+  </div>
+</div>
+
+<div id="chatter" aria-live="polite" aria-atomic="false" aria-relevant="additions"></div>
+
+<script>
+  const sonarScreen = document.getElementById('sonar-screen');
+  const interceptBox = document.getElementById('intercept-box');
+  const messageDiv = document.getElementById('message');
+  const questionArea = document.getElementById('question-area');
+  const closeBtn = document.getElementById('close-btn');
+  const chatter = document.getElementById('chatter');
+  const chatInputArea = document.getElementById('chat-input-area');
+  const chatInput = document.getElementById('chat-input');
+  const chatSendBtn = document.getElementById('chat-send-btn');
+
+  const distressSignals = [
+    {
+      id: 'signal1',
+      pos: {x: 220, y: 180},
+      type: 'red',
+      planet: {name: 'Planet Vegeta', coords: 'X:150 Y:75 Z:210'},
+      messages: [
+        "Incoming hostile ambush detected near Planet Vegeta.",
+        "Multiple Frieza Force units converging rapidly.",
+        "Warning: Scouter power levels dropping!"
+      ],
+      questions: [
+        {
+          q: "What is your battle readiness status?",
+          answers: [
+            {text: "Full power, ready to engage.", nextMessage: "Roger. Deploying reinforcements."},
+            {text: "Low power, requesting backup.", nextMessage: "Understood. Evacuate if necessary."},
+            {text: "Trying to hide and observe.", nextMessage: "Stay low. We will track enemy movements."},
+            {text: "Requesting strategic advice.", nextMessage: "Focus on defense, secure perimeter."}
+          ]
+        },
+        {
+          q: "Are there civilians nearby?",
+          answers: [
+            {text: "Yes, evacuate immediately.", nextMessage: "Confirmed. Evacuation protocol initiated."},
+            {text: "No civilians detected.", nextMessage: "Good. Prepare for battle."},
+            {text: "Unknown, scanning area.", nextMessage: "Keep scanning. Report status."},
+            {text: "Reluctant to engage due to civilians.", nextMessage: "Proceed with caution."}
+          ]
+        }
+      ]
+    },
+    {
+      id: 'signal2',
+      pos: {x: 390, y: 400},
+      type: 'green',
+      planet: {name: 'Zui Spaceport', coords: 'X:320 Y:150 Z:60'},
+      messages: [
+        "Routine defense patrol reporting all clear.",
+        "Scouter calibration stable.",
+        "No anomalies detected."
+      ],
+      questions: [
+        {
+          q: "Confirm patrol sector?",
+          answers: [
+            {text: "Sector Alpha.", nextMessage: "Acknowledged. Maintaining vigilance."},
+            {text: "Sector Beta.", nextMessage: "Acknowledged. Monitoring enemy activity."},
+            {text: "Sector Gamma.", nextMessage: "Acknowledged. No threats detected."},
+            {text: "Requesting sector reassignment.", nextMessage: "Hold position until further orders."}
+          ]
+        }
+      ]
+    },
+    {
+      id: 'signal3',
+      pos: {x: 480, y: 140},
+      type: 'yellow',
+      planet: {name: 'Orbital Crash Site', coords: 'X:200 Y:90 Z:400'},
+      messages: [
+        "Distress beacon activated after pod crash.",
+        "Scouter systems malfunctioning.",
+        "Urgent assistance required."
+      ],
+      questions: [
+        {
+          q: "Status of the crash site?",
+          answers: [
+            {text: "Crash site unstable.", nextMessage: "Evacuation advised."},
+            {text: "No life signs detected.", nextMessage: "Continue scan for survivors."},
+            {text: "Survivors found, low power.", nextMessage: "Sending rescue team."},
+            {text: "Pod destroyed beyond repair.", nextMessage: "Retrieval mission planned."}
+          ]
+        }
+      ]
+    },
+    // Additional random blips for atmosphere
+    {
+      id: 'signal4',
+      pos: {x: 150, y: 450},
+      type: 'green',
+      planet: {name: 'Moon Omega', coords: 'X:10 Y:200 Z:350'},
+      messages: [
+        "Rebel scout vessel passing nearby.",
+        "Unusual energy signatures detected."
+      ],
+      questions: [
+        {
+          q: "Observe rebel activity?",
+          answers: [
+            {text: "Track silently.", nextMessage: "Maintaining stealth mode."},
+            {text: "Report to command.", nextMessage: "Data transmitted."},
+            {text: "Ignore for now.", nextMessage: "Standing by."},
+            {text: "Prepare for potential engagement.", nextMessage: "Weapons on standby."}
+          ]
+        }
+      ]
+    },
+    {
+      id: 'signal5',
+      pos: {x: 320, y: 90},
+      type: 'yellow',
+      planet: {name: 'Crash Debris Field', coords: 'X:420 Y:210 Z:150'},
+      messages: [
+        "Scanning crash debris... signs of sabotage suspected.",
+        "Investigating energy anomalies."
+      ],
+      questions: [
+        {
+          q: "Proceed with investigation?",
+          answers: [
+            {text: "Yes, collect samples.", nextMessage: "Samples secured."},
+            {text: "No, report findings.", nextMessage: "Findings sent to HQ."},
+            {text: "Request backup.", nextMessage: "Backup en route."},
+            {text: "Hold position and observe.", nextMessage: "Observation ongoing."}
+          ]
+        }
+      ]
+    }
+  ];
+
+  // Special creepy big ship signal (purple) that appears after 90 seconds
+  const bigShipSignal = {
+    id: 'bigShip',
+    pos: {x: 280, y: 300},
+    type: 'purple',
+    planet: {name: 'Unknown Sector', coords: 'X:??? Y:??? Z:???'},
+    messages: [
+      "Warning: Massive unidentified vessel detected.",
+      "Signal distorted... fragments of unknown origin.",
+      "Crew transmissions corrupted and fragmented."
+    ],
+    questions: [
+      {
+        q: "Attempt to decode transmissions?",
+        answers: [
+          {text: "Yes, begin decoding.", nextMessage: "Decoding... partial message: 'They are coming... eradication... no escape...'"},
+          {text: "No, isolate signal.", nextMessage: "Signal isolated. Further attempts risky."},
+          {text: "Try to trace signal origin.", nextMessage: "Signal origin traced to uncharted dark sector."},
+          {text: "Alert command immediately.", nextMessage: "Command alerted. Awaiting instructions."}
+        ]
+      },
+      {
+        q: "Prepare defenses?",
+        answers: [
+          {text: "Deploy all units to perimeter.", nextMessage: "Perimeter defenses active."},
+          {text: "Keep forces on standby.", nextMessage: "Forces on standby."},
+          {text: "Attempt communication with vessel.", nextMessage: "No response from vessel."},
+          {text: "Initiate evacuation protocols.", nextMessage: "Evacuation procedures started."}
+        ]
+      }
+    ]
+  };
+
+  let signals = [...distressSignals]; // start with base signals
+  let specialSignalAdded = false;
+
+  // Create blips and planets on radar
+  function createBlip(signal) {
+    const blip = document.createElement('div');
+    blip.className = 'blip ' + signal.type;
+    blip.style.left = signal.pos.x + 'px';
+    blip.style.top = signal.pos.y + 'px';
+    blip.tabIndex = 0;
+    blip.setAttribute('role', 'button');
+    blip.setAttribute('aria-label', `${signal.planet.name} signal - coordinates ${signal.planet.coords}`);
+    blip.addEventListener('click', () => openIntercept(signal));
+    blip.addEventListener('keypress', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        openIntercept(signal);
+        e.preventDefault();
+      }
+    });
+    sonarScreen.appendChild(blip);
+    return blip;
+  }
+
+  // Planets with tooltips
+  const planets = [
+    {name: 'Planet Vegeta', x: 200, y: 520, coords: 'X:150 Y:75 Z:210', info: 'Homeworld of the Saiyan race.\nRuled by King Vegeta.\nKnown for Oozaru transformations.'},
+    {name: 'Zui Spaceport', x: 400, y: 520, coords: 'X:320 Y:150 Z:60', info: 'Major spaceport hub.\nLow management but crucial for arrivals.\nRumors of rebels and secret intel.'},
+    {name: 'Moon', x: 300, y: 570, coords: 'X:0 Y:0 Z:0', info: 'Moon orbiting Planet Vegeta.\nSource of Oozaru transformations.\nHiding Tarble, the lost Saiyan.'}
+  ];
+  planets.forEach(p => {
+    const planetEl = document.createElement('div');
+    planetEl.className = 'planet';
+    planetEl.style.left = p.x + 'px';
+    planetEl.style.top = p.y + 'px';
+    planetEl.textContent = p.name;
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip';
+    tooltip.textContent = `${p.name}\nCoords: ${p.coords}\n\n${p.info}`;
+    planetEl.appendChild(tooltip);
+    sonarScreen.appendChild(planetEl);
+  });
+
+  let blipElements = signals.map(createBlip);
+
+  // Scanner line sweep on canvas
+  const canvas = document.getElementById('scanner-line');
+  const ctx = canvas.getContext('2d');
+  const centerX = canvas.width/2;
+  const centerY = canvas.height/2;
+  let angle = 0;
+
+  function drawScanner() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.rotate(angle);
+    const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 300);
+    grad.addColorStop(0, 'rgba(0,255,0,0.3)');
+    grad.addColorStop(1, 'rgba(0,255,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, 300, -0.02, 0.02);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    angle += 0.01;
+    if (angle > 2*Math.PI) angle = 0;
+    requestAnimationFrame(drawScanner);
+  }
+  drawScanner();
+
+  // Blip jitter animation
+  function jitterBlips() {
+    blipElements.forEach((b, i) => {
+      const baseX = signals[i].pos.x;
+      const baseY = signals[i].pos.y;
+      const offsetX = (Math.sin(Date.now() / 300 + baseX) * 2);
+      const offsetY = (Math.cos(Date.now() / 300 + baseY) * 2);
+      b.style.left = (baseX + offsetX) + 'px';
+      b.style.top = (baseY + offsetY) + 'px';
+    });
+    requestAnimationFrame(jitterBlips);
+  }
+  jitterBlips();
+
+  // Ambient chatter messages
+  const chatterLines = [
+    "Scanner calibrated... awaiting signals...",
+    "All clear in sector Alpha.",
+    "Power levels stable. Monitoring all frequencies.",
+    "Crew alert: unusual energy detected nearby.",
+    "Be vigilant. Frieza forces could strike anytime."
+  ];
+  let chatterIndex = 0;
+  function updateChatter() {
+    chatter.textContent = chatterLines[chatterIndex];
+    chatterIndex = (chatterIndex + 1) % chatterLines.length;
+  }
+  updateChatter();
+  setInterval(updateChatter, 7000);
+
+  // Open intercept box with signal interaction
+  let currentSignal = null;
+  let questionIndex = 0;
+
+  function openIntercept(signal) {
+    currentSignal = signal;
+    questionIndex = 0;
+    interceptBox.style.display = 'block';
+    chatInputArea.style.display = 'none';
+    showMessages(signal.messages, () => {
+      showQuestion(signal.questions[questionIndex]);
+    });
+  }
+
+  function showMessages(messages, callback) {
+    let i = 0;
+    function showNext() {
+      if (i >= messages.length) {
+        callback();
+        return;
+      }
+      messageDiv.textContent = messages[i];
+      i++;
+      setTimeout(showNext, 2200);
+    }
+    showNext();
+  }
+
+  function showQuestion(question) {
+    messageDiv.textContent = question.q;
+    questionArea.innerHTML = '';
+    question.answers.forEach((ans, idx) => {
+      const btn = document.createElement('button');
+      btn.className = 'answer-btn';
+      btn.textContent = ans.text;
+      btn.addEventListener('click', () => {
+        messageDiv.textContent = ans.nextMessage;
+        questionArea.innerHTML = '';
+        questionIndex++;
+        if (currentSignal.questions[questionIndex]) {
+          setTimeout(() => {
+            showQuestion(currentSignal.questions[questionIndex]);
+          }, 2000);
+        } else {
+          setTimeout(() => {
+            interceptBox.style.display = 'none';
+          }, 3000);
+        }
+      });
+      questionArea.appendChild(btn);
+    });
+  }
+
+  closeBtn.addEventListener('click', () => {
+    interceptBox.style.display = 'none';
+  });
+
+  // After 90 seconds add the creepy big ship blip and recreate blip elements
+  setTimeout(() => {
+    if (!specialSignalAdded) {
+      signals.push(bigShipSignal);
+      const newBlip = createBlip(bigShipSignal);
+      blipElements.push(newBlip);
+      specialSignalAdded = true;
+      chatterLines.push("Warning: Unidentified large vessel detected on sensors...");
+    }
+  }, 90000);
+
+</script>
+</body>
+</html>
